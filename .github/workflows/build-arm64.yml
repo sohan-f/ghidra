@@ -1,0 +1,88 @@
+
+name: Build Ghidra Linux ARM64
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout latest master
+        uses: actions/checkout@v6
+        with:
+          ref: master
+          fetch-depth: 1
+
+      - name: Read required JDK version
+        shell: bash
+        run: |
+          set -euo pipefail
+          JDK_VER="$(awk -F= \
+            '$1 == "application.java.min" {gsub(/[[:space:]]/, "", $2); print $2}' \
+            Ghidra/application.properties)"
+          test -n "$JDK_VER"
+          echo "JDK_VER=$JDK_VER" >> "$GITHUB_ENV"
+          echo "Required JDK: $JDK_VER"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JDK_VER }}
+
+      - name: Show build environment
+        run: |
+          uname -a
+          uname -m
+          java -version
+          ./gradlew --version
+
+      - name: Fetch dependencies
+        run: |
+          ./gradlew \
+            -I gradle/support/fetchDependencies.gradle \
+            -DhideDownloadProgress \
+            -DnoEclipse
+
+      - name: Build full Ghidra distribution
+        run: |
+          ./gradlew buildGhidra --parallel
+
+      - name: Verify distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          find build/dist -maxdepth 1 -type f -name 'ghidra_*.zip' -print
+
+          ZIP="$(find build/dist -maxdepth 1 \
+            -type f -name 'ghidra_*.zip' -print -quit)"
+
+          test -n "$ZIP"
+          echo "Distribution: $ZIP"
+          sha256sum "$ZIP"
+
+          mkdir -p /tmp/ghidra-verify
+          unzip -q "$ZIP" -d /tmp/ghidra-verify
+
+          echo "Native decompiler architectures:"
+          find /tmp/ghidra-verify -type f -name decompile \
+            -exec file {} \;
+
+      - name: Upload full Linux ARM64 distribution
+        uses: actions/upload-artifact@v7
+        with:
+          name: ghidra-linux-arm64-master-${{ github.sha }}
+          path: build/dist/ghidra_*.zip
+          if-no-files-found: error
+          retention-days: 14
+          
