@@ -1,11 +1,10 @@
-
 name: Build Ghidra Linux ARM64
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - master
+      - stable
 
 permissions:
   contents: read
@@ -19,7 +18,7 @@ jobs:
       - name: Checkout latest master
         uses: actions/checkout@v6
         with:
-          ref: master
+          ref: stable
           fetch-depth: 1
 
       - name: Read required JDK version
@@ -81,7 +80,7 @@ jobs:
       - name: Upload full Linux ARM64 distribution
         uses: actions/upload-artifact@v7
         with:
-          name: ghidra-linux-arm64-master-${{ github.sha }}
+          name: ghidra-linux-arm64-stable-${{ github.sha }}
           path: build/dist/ghidra_*.zip
           if-no-files-found: error
           retention-days: 14
